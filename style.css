@@ -1,0 +1,20 @@
+.vc-call-recorder-status {
+    color: var(--status-danger);
+}
+
+.vc-call-recorder-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: currentcolor;
+    vertical-align: middle;
+    animation: vc-call-recorder-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes vc-call-recorder-pulse {
+    50% {
+        opacity: 0.2;
+    }
+}
