@@ -175,7 +175,10 @@ export default definePlugin({
     name: "CallRecorder",
     description: "Records voice calls as a video showing who is speaking, along with webcams and screen shares, saved in a separate folder for each server.",
     tags: ["Voice", "Media"],
-    authors: [EquicordDevs.AyamiAlince],
+    authors: [{
+    name: "AyamiAlince",
+    id: 863738240753074196
+}],
     dependencies: ["UserAreaAPI"],
     settings,
 
