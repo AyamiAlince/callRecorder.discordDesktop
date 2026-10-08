@@ -12,7 +12,6 @@ import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { Paragraph } from "@components/Paragraph";
-import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { useFixedTimer } from "@utils/react";
 import { formatDuration } from "@utils/text";
@@ -176,9 +175,9 @@ export default definePlugin({
     description: "Records voice calls as a video showing who is speaking, along with webcams and screen shares, saved in a separate folder for each server.",
     tags: ["Voice", "Media"],
     authors: [{
-    name: "AyamiAlince",
-    id: 863738240753074196
-}],
+        name: "AyamiAlince",
+        id: 863738240753074196n
+    }],
     dependencies: ["UserAreaAPI"],
     settings,
 
