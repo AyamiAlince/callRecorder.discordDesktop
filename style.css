@@ -1,6 +1,5 @@
 .vc-call-recorder-status {
     color: var(--status-danger);
-    cursor: pointer;
 }
 
 .vc-call-recorder-dot {

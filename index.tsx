@@ -17,7 +17,7 @@ import { useFixedTimer } from "@utils/react";
 import { formatDuration } from "@utils/text";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { proxyLazyWebpack } from "@webpack";
-import { Flux, FluxDispatcher, RTCConnectionStore, SelectedChannelStore, Tooltip, useStateFromStores } from "@webpack/common";
+import { Flux, FluxDispatcher, RTCConnectionStore, SelectedChannelStore, showToast, Toasts, useStateFromStores } from "@webpack/common";
 import type { ReactNode } from "react";
 
 import { openPreview } from "./preview";
@@ -137,12 +137,30 @@ function RecordIcon({ className, recording }: { className?: string; recording?: 
     );
 }
 
+function PreviewIcon({ className }: { className?: string; }) {
+    return (
+        <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 12a9 9 0 1 0 2.64-6.36L3 8.3" />
+            <path d="M3 3v5.3h5.3" />
+            <path d="M12 7v5l3 2" />
+        </svg>
+    );
+}
+
 function RecordButton({ iconForeground, hideTooltips, nameplate }: UserAreaRenderProps) {
     const inVoice = useStateFromStores([SelectedChannelStore], () => SelectedChannelStore.getVoiceChannelId() != null);
     const recording = useStateFromStores([RecorderStore], () => RecorderStore.startedAt != null);
     if (!inVoice) return null;
 
-    return (
+    return <>
+        {recording && (
+            <UserAreaButton
+                tooltipText={hideTooltips ? undefined : "Recording Preview"}
+                icon={<PreviewIcon className={iconForeground} />}
+                plated={nameplate != null}
+                onClick={showPreview}
+            />
+        )}
         <UserAreaButton
             tooltipText={hideTooltips ? undefined : recording ? "Stop Recording" : "Start Recording"}
             icon={<RecordIcon className={iconForeground} recording={recording} />}
@@ -152,12 +170,16 @@ function RecordButton({ iconForeground, hideTooltips, nameplate }: UserAreaRende
             plated={nameplate != null}
             onClick={() => setRecording(activeRecording ? null : voiceChannelId)}
         />
-    );
+    </>;
 }
 
 function showPreview() {
+    if (closePreview) return;
     const source = activeRecording?.preview;
-    if (!source || closePreview) return;
+    if (!source) {
+        showToast("The recording is still starting, try again in a moment.", Toasts.Type.MESSAGE);
+        return;
+    }
 
     const close = openPreview(source, () => {
         if (closePreview === close) closePreview = null;
@@ -169,22 +191,10 @@ function RecordingTimer({ startedAt }: { startedAt: number; }) {
     const elapsed = useFixedTimer({ initialTime: startedAt });
 
     return (
-        <Tooltip text="Open Preview">
-            {props => (
-                <span
-                    {...props}
-                    className={cl("status")}
-                    role="button"
-                    onClick={e => {
-                        e.stopPropagation();
-                        showPreview();
-                    }}
-                >
-                    <span className={cl("dot")} />
-                    REC {formatDuration(elapsed)}
-                </span>
-            )}
-        </Tooltip>
+        <span className={cl("status")}>
+            <span className={cl("dot")} />
+            REC {formatDuration(elapsed)}
+        </span>
     );
 }
 
