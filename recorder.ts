@@ -11,7 +11,10 @@ import { findByCodeLazy } from "@webpack";
 import { ChannelRTCStore, ChannelStore, GuildStore, MediaEngineStore, moment, showToast, Toasts, UserStore } from "@webpack/common";
 
 import { Native, settings } from ".";
+import { captureDesktopAudio } from "./audio";
 import { drawFrame, HEIGHT, Tile, WIDTH } from "./draw";
+import type { PreviewSource } from "./player";
+import { SegmentIndex } from "./segments";
 
 const acquireVideo: (streamId: string) => { stream: MediaStream; release(): void; } = findByCodeLazy(".addDirectVideoOutputSink(");
 const watchStream: (stream: Stream, options: { noFocus: boolean; forceMultiple: boolean; }) => void = findByCodeLazy('type:"STREAM_WATCH"');
@@ -25,12 +28,17 @@ const FORMATS = [
     { extension: "webm", mimeType: "video/webm;codecs=vp8,opus" }
 ] as const;
 
-const loopback: MediaTrackConstraints & { mandatory: { chromeMediaSource: string; }; } = { mandatory: { chromeMediaSource: "desktop" } };
+export interface Recording {
+    stop(): void;
+    /** null until the recording has actually started */
+    preview: PreviewSource | null;
+}
 
-export function record(channelId: string, onFail: () => void) {
+export function record(channelId: string, onFail: () => void): Recording {
     const cleanup: (() => unknown)[] = [];
     let recorder: MediaRecorder | undefined;
     let stopped = false;
+    const recording: Recording = { stop: () => stop(), preview: null };
 
     const stop = () => {
         stopped = true;
@@ -44,14 +52,12 @@ export function record(channelId: string, onFail: () => void) {
         const title = guild ? `${guild.name}  ›  ${channelName}` : channelName;
         const myId = UserStore.getCurrentUser().id;
 
-        const desktop = await navigator.mediaDevices.getUserMedia({ audio: loopback, video: loopback });
-        cleanup.push(() => desktop.getTracks().forEach(t => t.stop()));
-        desktop.getVideoTracks().forEach(t => t.stop());
-
         const audio = new AudioContext();
         cleanup.push(() => audio.close());
+        // Without a user gesture the context can start suspended, which would record silence
+        audio.resume().catch(() => { });
         const output = audio.createMediaStreamDestination();
-        audio.createMediaStreamSource(desktop).connect(output);
+        cleanup.push(await captureDesktopAudio(audio, output));
 
         let micGain: GainNode | undefined;
         if (settings.store.recordMicrophone) {
@@ -159,10 +165,23 @@ export function record(channelId: string, onFail: () => void) {
         };
         const rec = recorder = new MediaRecorder(new MediaStream([...canvas.captureStream(FPS).getTracks(), ...output.stream.getTracks()]), options);
 
+        const index = new SegmentIndex(extension === "webm");
+        let startedAt = 0;
+        let written = 0;
+        rec.onstart = () => startedAt = performance.now();
+        const elapsed = () => startedAt && (performance.now() - startedAt) / 1000;
+
         let writes = Promise.resolve();
         rec.ondataavailable = ({ data }) => {
+            const time = elapsed();
             writes = writes.then(async () => {
-                if (await Native.writeChunk(id, new Uint8Array(await data.arrayBuffer())) || stopped) return;
+                const chunk = new Uint8Array(await data.arrayBuffer());
+                if (await Native.writeChunk(id, chunk)) {
+                    index.push(chunk, time);
+                    written += chunk.length;
+                    return;
+                }
+                if (stopped) return;
                 showToast("Call recording stopped because the file couldn't be written.", Toasts.Type.FAILURE);
                 onFail();
             });
@@ -173,7 +192,17 @@ export function record(channelId: string, onFail: () => void) {
             onFail();
         };
         rec.onstop = () => writes.then(() => cleanup.forEach(fn => fn()));
-        rec.start(5000);
+        // Short chunks so the preview gets close to live
+        rec.start(1000);
+
+        recording.preview = {
+            mimeType,
+            index,
+            elapsed,
+            written: () => written,
+            // IPC always hands over a fresh ArrayBuffer
+            read: (offset, length) => Native.readChunk(id, offset, length) as Promise<Uint8Array<ArrayBuffer> | null>
+        };
     };
 
     start().catch(err => {
@@ -183,5 +212,5 @@ export function record(channelId: string, onFail: () => void) {
         onFail();
     });
 
-    return stop;
+    return recording;
 }

@@ -13,8 +13,9 @@ import { join } from "path";
 
 import { defragment } from "./mp4";
 
-const files = new Map<string, { handle: FileHandle; path: string; }>();
+const files = new Map<string, { handle: FileHandle; path: string; reader?: Promise<FileHandle>; }>();
 const EXTENSIONS = new Set(["mp4", "webm"]);
+const MAX_READ = 16 * 1024 * 1024;
 let backgroundThrottling = true;
 
 const getBaseDir = () => RendererSettings.store.plugins?.CallRecorder?.folder || join(app.getPath("documents"), "Discord Recordings");
@@ -65,6 +66,21 @@ export async function writeChunk(_: IpcMainInvokeEvent, id: string, data: Uint8A
     }
 }
 
+/** Reads back part of a recording that is still being written, for the preview */
+export async function readChunk(_: IpcMainInvokeEvent, id: string, offset: number, length: number) {
+    const file = files.get(id);
+    if (!file || !Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length <= 0) return null;
+
+    try {
+        file.reader ??= open(file.path, "r");
+        const buffer = Buffer.alloc(Math.min(length, MAX_READ));
+        const { bytesRead } = await (await file.reader).read(buffer, 0, buffer.length, offset);
+        return new Uint8Array(buffer.buffer, buffer.byteOffset, bytesRead);
+    } catch {
+        return null;
+    }
+}
+
 export async function finishFile(e: IpcMainInvokeEvent, id: string) {
     const file = files.get(id);
     if (!file) return;
@@ -73,6 +89,7 @@ export async function finishFile(e: IpcMainInvokeEvent, id: string) {
     if (!files.size) e.sender.setBackgroundThrottling(backgroundThrottling);
 
     try {
+        await file.reader?.then(reader => reader.close(), () => { });
         const { size } = await file.handle.stat();
         await file.handle.close();
         if (!size) await rm(file.path);

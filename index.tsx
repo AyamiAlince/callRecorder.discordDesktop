@@ -17,10 +17,11 @@ import { useFixedTimer } from "@utils/react";
 import { formatDuration } from "@utils/text";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { proxyLazyWebpack } from "@webpack";
-import { Flux, FluxDispatcher, RTCConnectionStore, SelectedChannelStore, useStateFromStores } from "@webpack/common";
+import { Flux, FluxDispatcher, RTCConnectionStore, SelectedChannelStore, Tooltip, useStateFromStores } from "@webpack/common";
 import type { ReactNode } from "react";
 
-import { record } from "./recorder";
+import { openPreview } from "./preview";
+import { record, Recording } from "./recorder";
 
 export const Native = VencordNative.pluginHelpers.CallRecorder as PluginNative<typeof import("./native")>;
 
@@ -36,7 +37,8 @@ const RecorderStore = proxyLazyWebpack(() => {
 });
 
 let voiceChannelId: string | null = null;
-let stopRecording: (() => void) | null = null;
+let activeRecording: Recording | null = null;
+let closePreview: (() => void) | null = null;
 
 function FolderSetting() {
     const { folder } = settings.use(FOLDER_KEYS);
@@ -103,14 +105,15 @@ export const settings = definePluginSettings({
 });
 
 function setRecording(channelId: string | null) {
-    stopRecording?.();
-    stopRecording = null;
+    closePreview?.();
+    closePreview = null;
+    activeRecording?.stop();
+    activeRecording = null;
 
     if (channelId) {
-        const stop = record(channelId, () => {
-            if (stopRecording === stop) setRecording(null);
+        const current = activeRecording = record(channelId, () => {
+            if (activeRecording === current) setRecording(null);
         });
-        stopRecording = stop;
     }
 
     RecorderStore.startedAt = channelId ? Date.now() : null;
@@ -147,19 +150,41 @@ function RecordButton({ iconForeground, hideTooltips, nameplate }: UserAreaRende
             aria-checked={recording}
             redGlow={recording}
             plated={nameplate != null}
-            onClick={() => setRecording(stopRecording ? null : voiceChannelId)}
+            onClick={() => setRecording(activeRecording ? null : voiceChannelId)}
         />
     );
+}
+
+function showPreview() {
+    const source = activeRecording?.preview;
+    if (!source || closePreview) return;
+
+    const close = openPreview(source, () => {
+        if (closePreview === close) closePreview = null;
+    });
+    closePreview = close;
 }
 
 function RecordingTimer({ startedAt }: { startedAt: number; }) {
     const elapsed = useFixedTimer({ initialTime: startedAt });
 
     return (
-        <span className={cl("status")}>
-            <span className={cl("dot")} />
-            REC {formatDuration(elapsed)}
-        </span>
+        <Tooltip text="Open Preview">
+            {props => (
+                <span
+                    {...props}
+                    className={cl("status")}
+                    role="button"
+                    onClick={e => {
+                        e.stopPropagation();
+                        showPreview();
+                    }}
+                >
+                    <span className={cl("dot")} />
+                    REC {formatDuration(elapsed)}
+                </span>
+            )}
+        </Tooltip>
     );
 }
 

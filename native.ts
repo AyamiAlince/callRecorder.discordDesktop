@@ -5,4 +5,5 @@
  */
 
 // Keep a file entry point for builders that only discover native.ts.
-export { chooseFolder, finishFile, openFolder, startFile, writeChunk } from "./native/index";
+export { chooseFolder, finishFile, openFolder, readChunk, startFile, writeChunk } from "./native/index";
+export { readLoopback, startLoopback, stopLoopback } from "./native/loopback";

@@ -1,5 +1,6 @@
 .vc-call-recorder-status {
     color: var(--status-danger);
+    cursor: pointer;
 }
 
 .vc-call-recorder-dot {
@@ -17,4 +18,42 @@
     50% {
         opacity: 0.2;
     }
+}
+
+.vc-call-recorder-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-bottom: 16px;
+}
+
+.vc-call-recorder-preview-video {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 8px;
+    background: #000;
+    cursor: pointer;
+}
+
+.vc-call-recorder-preview-seek {
+    width: 100%;
+    accent-color: var(--brand-500, #5865f2);
+    cursor: pointer;
+}
+
+.vc-call-recorder-preview-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.vc-call-recorder-preview-time {
+    margin-left: auto;
+    color: var(--text-default, var(--text-normal));
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-call-recorder-preview-error {
+    color: var(--status-danger);
 }
