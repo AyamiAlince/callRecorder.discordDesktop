@@ -80,7 +80,7 @@ export const settings = definePluginSettings({
     },
     recordMicrophone: {
         type: OptionType.BOOLEAN,
-        description: "Include your own microphone in recordings. It stays silent while you are muted.",
+        description: "Include your own microphone in recordings, only while Discord shows you as speaking so background noise stays out.",
         default: true
     },
     recordCameras: {

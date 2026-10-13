@@ -21,6 +21,7 @@ const watchStream: (stream: Stream, options: { noFocus: boolean; forceMultiple: 
 
 const logger = new Logger("CallRecorder");
 const FPS = 15;
+const MIC_DELAY = 0.15;
 
 const FORMATS = [
     { extension: "mp4", mimeType: "video/mp4;codecs=avc1,mp4a.40.2" },
@@ -63,10 +64,16 @@ export function record(channelId: string, onFail: () => void): Recording {
         if (settings.store.recordMicrophone) {
             const deviceName = MediaEngineStore.getInputDevices()[MediaEngineStore.getInputDeviceId()]?.name;
             const deviceId = (await navigator.mediaDevices.enumerateDevices()).find(d => d.kind === "audioinput" && d.label === deviceName)?.deviceId;
-            const mic = await navigator.mediaDevices.getUserMedia({ audio: deviceId ? { deviceId: { exact: deviceId } } : true });
+            const mic = await navigator.mediaDevices.getUserMedia({
+                audio: { ...(deviceId ? { deviceId: { exact: deviceId } } : {}), noiseSuppression: true }
+            });
             cleanup.push(() => mic.getTracks().forEach(t => t.stop()));
             micGain = audio.createGain();
-            audio.createMediaStreamSource(mic).connect(micGain).connect(output);
+            micGain.gain.value = 0;
+            // Discord's speaking state lags behind the voice, delay the mic so the gate opens before the first word
+            const micDelay = audio.createDelay(1);
+            micDelay.delayTime.value = MIC_DELAY;
+            audio.createMediaStreamSource(mic).connect(micDelay).connect(micGain).connect(output);
         }
 
         const canvas = document.createElement("canvas");
@@ -137,9 +144,9 @@ export function record(channelId: string, onFail: () => void): Recording {
 
             drawFrame(ctx, title, tiles, avatars);
 
-            const micLive = !MediaEngineStore.isSelfMute() && !MediaEngineStore.isSelfDeaf()
-                && (MediaEngineStore.getMode() !== "PUSH_TO_TALK" || selfSpeaking);
-            micGain?.gain.setTargetAtTime(micLive ? 1 : 0, audio.currentTime, 0.02);
+            // The raw mic hears everything, so only let it through while Discord transmits (voice activity or push to talk)
+            const micLive = selfSpeaking && !MediaEngineStore.isSelfMute() && !MediaEngineStore.isSelfDeaf();
+            micGain?.gain.setTargetAtTime(micLive ? 1 : 0, audio.currentTime + MIC_DELAY, micLive ? 0.01 : 0.05);
         };
         tick();
         const timer = setInterval(tick, 1000 / FPS);
